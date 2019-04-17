@@ -1,0 +1,74 @@
+(begin-tx)
+(env-keys ["admin" "kate" "bob" "crowd"])
+(env-data { "admin-keyset": ["admin"],"crowd-keyset": ["crowd"], "kate-keyset": ["kate"], "bob-keyset": ["bob"]  })
+
+(load "crowdfund.pact")
+(commit-tx)
+(typecheck 'crowdfund-campaign)
+(verify 'crowdfund-campaign)
+
+(begin-tx)
+(use crowdfund-campaign)
+(create-account "kate-acct" "kate-keyset" 50.0)
+(create-account "bob-acct" "bob-keyset" 100.0)
+(create-campaign "campaign1" "crowd-acct" "crowd-keyset" 800.0 (time "2019-07-22T12:00:00Z"));campaignId target-balance target-date keyset)
+(commit-tx)
+
+;;Initiate Funding
+(begin-tx)
+(use crowdfund-campaign)
+
+(fund-campaign "kate-acct" "campaign1" 20.0)
+(expect "balance of 30.0 after debit step" 30.0 (with-read accounts-table "kate-acct" { "balance" := b } b))
+(expect "balance of 0.0 after debit step" 0.0 (with-read accounts-table "campaign1" { "balance" := b } b))
+
+(rollback-tx)
+
+;;Rollback to first beginning state
+(begin-tx)
+(use crowdfund-campaign)
+
+(expect "balance of 50.0 after rollback" 50.0 (with-read accounts-table "kate-acct" { "balance" := b } b))
+(expect "balance of 0.0 after rollback" 0.0 (with-read accounts-table "campaign1" { "balance" := b } b))
+
+(commit-tx)
+
+;; Crowdfund campaign cancels
+(begin-tx)
+(use crowdfund-campaign)
+
+;;Step 0 - Initiates by debiting the investor
+(env-step 0)
+(fund-campaign "bob-acct" "campaign1" 30.0)
+(expect "balance of 70.0 after debit step" 70.0 (with-read accounts-table "bob-acct" { "balance" := b } b))
+(expect "balance of 0.0 after debit step" 0.0 (with-read accounts-table "campaign1" { "balance" := b } b))
+(env-step)
+
+;;Step 0 - Rollback when campaign doesn't meet the goal
+(env-step 0 true)
+(fund-campaign "bob-acct" "campaign1" 30.0)
+(expect "balance of 100.0 after investor credit step" 100.0 (with-read accounts-table "bob-acct" { "balance" := b } b))
+(expect "balance of 0.0 after investor credit step" 0.0 (with-read accounts-table "campaign1" { "balance" := b } b))
+(env-step)
+
+(commit-tx)
+
+;; Crowdfund success
+(begin-tx)
+(use crowdfund-campaign)
+
+;;Step 0 - Initiates by debiting the investor
+(env-step 0)
+(fund-campaign "bob-acct" "campaign1" 30.0)
+(expect "balance of 70.0 after debit step" 70.0 (with-read accounts-table "bob-acct" { "balance" := b } b))
+(expect "balance of 0.0 after debit step" 0.0 (with-read accounts-table "campaign1" { "balance" := b } b))
+(env-step)
+
+;;Step 1 - Finishes when campaign succeeds
+(env-step 1)
+(fund-campaign "bob-acct" "campaign1" 30.0)
+(expect "balance of 70.0 after campaign credit step" 70.0 (with-read accounts-table "bob-acct" { "balance" := b } b))
+(expect "balance of 30.0 after campaign credit step" 30.0 (with-read accounts-table "campaign1" { "balance" := b } b))
+(env-step)
+
+(commit-tx)
