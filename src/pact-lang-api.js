@@ -419,9 +419,10 @@ const fetchSend = async function(sendCmd, apiHost){
   return tx;
 };
 
-const fetchSendCont = async function(cont, apiHost){
+const fetchSendCont = async function(contCmd, apiHost){
   if (!apiHost)  throw new Error(`Pact.fetch.send(): No apiHost provided`);
-  const txRes = await fetch(`${apiHost}/api/v1/send`, mkReq(cont));
+  const sendConts = asArray(contCmd).map(cont => prepareContCmd(cont.keyPairs, cont.nonce, cont.proof, cont.pactId, cont.rollback, cont.step, cont.envData, cont.meta))
+  const txRes = await fetch(`${apiHost}/api/v1/send`, mkReq(mkPublicSend(sendConts)));
   const tx = await txRes.json();
   return tx;
 };

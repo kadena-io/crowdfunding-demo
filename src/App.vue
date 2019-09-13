@@ -111,6 +111,9 @@
                   {{ project.title }}
                 </v-card-title>
                 <v-card-text>
+                {{project.owner}}
+                </v-card-text>
+                <v-card-text>
                   {{ project.description }}
                 </v-card-text>
                 <v-card-actions>
@@ -149,9 +152,9 @@
                     <br/><br/>
                     <small>Up Until: <b>{{ new Date(project.targetDate) }}</b></small>
                     <br/><br/>
-                    <small>Goal of <b>{{ project.targetAmount }} Kadena Coin </b></small>
-                    <small v-if="project.status == 1">wasn't achieved before deadline</small>
-                    <small v-if="project.status == 2">has been achieved</small>
+                    <small v-if="project.status == 1">Project Canceled</small>
+                    <small v-if="project.status == 2">has been Achieved</small>
+                    <small v-if="project.status == 3">has been Expired</small>
                   </div>
                 </v-card-title>
                 <v-flex
@@ -180,24 +183,62 @@
                 </v-flex>
                 <v-flex class="d-flex ml-3" xs12 sm6 md3>
                   <v-btn
+                    v-if="project.pacts == false"
                     class="mt-3"
                     color="amber darken-1 white--text"
                     @click="getPacts(project.title)"
                     :loading="project.isLoading"
                   >
-                    View Pacts
+                    View Funds
                   </v-btn>
-                </v-flex>
-                <v-flex class="d-flex ml-3" xs12 sm6 md3>
                   <v-btn
+                    v-if="project.pacts == true"
                     class="mt-3"
                     color="amber darken-1 white--text"
-                    v-if="project.currentState == 1"
-                    @click="getRefund(index)"
+                    @click="closePacts(project.title)"
                     :loading="project.isLoading"
                   >
-                    Get refund
+                    Close Funds
                   </v-btn>
+                </v-flex>
+                  <v-flex class="d-flex" xs6 >
+                    <v-btn
+                      v-if="project.pacts == true"
+                      class="mt-3"
+                      color="amber darken-1 white--text"
+                      @click="cancelPacts(project.title)"
+                      :loading="project.isLoading"
+                    >
+                      Refund all Funds
+                    </v-btn>
+                  </v-flex>
+                  <v-flex class="d-flex" xs6 >
+                    <v-btn
+                      v-if="project.pacts == true"
+                      class="mt-3"
+                      color="amber darken-1 white--text"
+                      @click="succeedCampaign(project.title)"
+                      :loading="project.isLoading"
+                    >
+                      Proceed all Funds
+                    </v-btn>
+                  </v-flex>
+                  <v-flex class="d-flex ml-3" xs12 sm6 md3>
+                    <v-card
+                        class="mx-auto"
+                        max-width="400"
+                        tile
+                        v-if="project.pacts == true"
+                        v-for="(pact, index) in pacts" :key="index" 
+                      >
+
+                      <v-list>
+                        <v-list-item>
+                          <v-list-item-title>{{pact.issuer}}</v-list-item-title>
+                        </v-list-item>
+                      </v-list>
+
+                    </v-card> 
                 </v-flex>
                 <v-card-actions v-if="project.status == 0" class="text-xs-center">
                   <span class="font-weight-bold" style="width: 200px;">
@@ -224,7 +265,6 @@
 <script>
 // We import our the scripts for the smart contract instantiation, and web3
 import Pact from './pact-lang-api.js';
-import uuidv4 from "uuid/v4";
 export default {
   name: 'App',
   data() {
@@ -258,13 +298,12 @@ export default {
       })
       .then((projects) => {
          this.projectData = projects.map(prj =>{
-           return {title:prj.title, description:prj.description, status:prj.status.int, currentAmount: prj["current-raise"], targetAmount: prj["target-raise"], targetDate: prj["target-date"]["time"], dialog:false, pacts: false}
+           return {title:prj.title, description:prj.description, status:prj.status.int, currentAmount: prj["current-raise"], targetAmount: prj["target-raise"], targetDate: prj["target-date"]["time"], owner: prj.ownerId, dialog:false, pacts: false}
          });
        });
     },
     getPacts(project){
-      // this.projectData = [...this.projectData, {...this.projectData.filter(prj => prj.title===project), pacts:true}]
-      // console.log(this.projectData)
+      this.projectData = [...this.projectData.filter(prj => prj.title!==project), {...this.projectData.filter(prj=>prj.title===project)[0], pacts:true}]
       const cmd= {
         pactCode: Pact.lang.mkExp(`crowdfund-campaign.fetch-pacts ${JSON.stringify(project)}`),
         keyPairs: Pact.crypto.genKeyPair()
@@ -274,12 +313,14 @@ export default {
         return res.data
       })
       .then((pacts) => {
-         this.pacts = pacts.map(p =>{
+         this.pacts = pacts.filter(p=>p.status.int!==1).map(p =>{
            return {campaign:p["campaign-title"], issuer:p.fundOwner, status:p.status.int, pactId: p["pact-id"]};
          });
-         console.log(this.pacts)
-         alert(this.pacts.filter(pact=> pact.status === 0))
        });
+    },
+    closePacts(project){
+      this.projectData = [...this.projectData.filter(prj => prj.title!==project), {...this.projectData.filter(prj=>prj.title===project)[0], pacts:false}]
+      this.pacts=[];
     },
     async startProject() {
       //Mounts wallet app
@@ -296,14 +337,54 @@ export default {
       const cmd = await Pact.wallet.sign(pactCode)
       Pact.wallet.sendSigned(cmd, this.APIHost)
     },
-    getRefund(index) {
+    async cancelPacts(project) {
+      let pacts=[];
+      const cmd= {
+        pactCode: Pact.lang.mkExp(`crowdfund-campaign.fetch-pacts ${JSON.stringify(project)}`),
+        keyPairs: Pact.crypto.genKeyPair()
+      }
+      const res = await Pact.fetch.local(cmd, this.APIHost);
+      pacts = res.data.filter(p=>p.status.int!==1).map(p=>p["pact-id"]);
       const myKs = {
         publicKey: "abd889b293d9cf2f1cff66fc6bf2a169cc2d90aa9da8f5af6959a1f49ee68b2a",
         secretKey: "678f2fee7c6ea6f0bafbcc28a94729d06ad6ef8603fe3063964cdc812b234f0d"}
-      const contCmd = Pact.simple.cont([myKs, Pact.crypto.genKeyPair()], "null", 0, "V2oWcKIsXTv-iwv9xCXCz5682pHRGXdzjmSQFi1TE10", true, {}, Pact.lang.mkMeta("crowdfund-operation", "1", 0.0000001, 100, 0, 28800));
-      Pact.fetch.cont(contCmd, this.APIHost)
-      this.projectData[index].isLoading = true;
-  }
+      const contCmd = (pact) => {
+        return {keyPairs: myKs, 
+                pactId: pact, 
+                step: 0, 
+                rollback: true, 
+                meta: Pact.lang.mkMeta("crowdfund-operation", "1", 0.0000001, 100, 0, 28800)
+              }
+      }
+      const contCmdArray = pacts.map(pact => contCmd(pact))
+      Pact.fetch.cont(contCmdArray, this.APIHost)
+      // this.projectData[index].isLoading = true;
+    },
+    async succeedCampaign(project){
+    let pacts=[];
+      const cmd= {
+        pactCode: Pact.lang.mkExp(`crowdfund-campaign.fetch-pacts ${JSON.stringify(project)}`),
+        keyPairs: Pact.crypto.genKeyPair()
+      }
+      const res = await Pact.fetch.local(cmd, this.APIHost);
+      pacts = res.data.filter(p=>p.status.int!==1).map(p=>p["pact-id"]);
+      const myKs = {
+        publicKey: "abd889b293d9cf2f1cff66fc6bf2a169cc2d90aa9da8f5af6959a1f49ee68b2a",
+        secretKey: "678f2fee7c6ea6f0bafbcc28a94729d06ad6ef8603fe3063964cdc812b234f0d"}
+      const contCmd = (pact) => {
+        return {keyPairs: myKs, 
+                pactId: pact, 
+                step: 1, 
+                rollback: false, 
+                meta: Pact.lang.mkMeta("crowdfund-operation", "1", 0.0000001, 100, 0, 28800)
+              }
+      }
+      const contCmdArray = pacts.map(pact => contCmd(pact))
+      Pact.fetch.cont(contCmdArray, this.APIHost)
+      // this.projectData[index].isLoading = true;
+
+
+    }
   }
 };
 </script>
