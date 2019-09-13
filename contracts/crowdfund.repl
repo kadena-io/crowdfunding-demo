@@ -1,0 +1,88 @@
+(begin-tx)
+(env-keys ["admin" "kate" "bob" "crowd" "s"])
+(env-data { "admin-keyset": ["admin"],"crowd-keyset": ["crowd"], "kate-keyset": ["kate"], "bob-keyset": ["bob"] })
+(load "coin-sig.pact")
+(load "coin.pact")
+(load "crowdfund.pact")
+(commit-tx)
+(typecheck 'crowdfund-campaign)
+(verify 'crowdfund-campaign)
+;;Set block time to (time "2019-05-08T17:03:20Z")
+(begin-tx)
+(use crowdfund-campaign)
+(use coin)
+
+(test-capability (TRANSFER))
+(create-account "kate-acct" (read-keyset "kate-keyset"))
+(credit "kate-acct" (read-keyset "kate-keyset") 50.0)
+
+(create-account "bob-acct" (read-keyset "bob-keyset"))
+(credit "bob-acct" (read-keyset "bob-keyset") 100.0)
+
+(create-account "crowd-acct" (read-keyset "crowd-keyset"))
+
+(create-campaign "project1" "DESCRIPTION" "crowd-acct" 800.0 (time "2019-08-21T12:00:00Z"));campaignId project description target-balance target-date keyset)
+(read-campaigns)
+(commit-tx)
+
+;;Initiate Funding
+(begin-tx)
+(use crowdfund-campaign)
+(use coin)
+(env-chain-data {"block-time": (time "2019-07-22T12:00:00Z")})
+(curr-time)
+(time "2016-07-22T12:00:00Z")
+(fund-campaign "kate-acct" "project1" 20.0)
+
+(curr-time)
+(expect "balance of 30.0 after debit step" 30.0
+  (with-read coin-table "kate-acct" { "balance" := b } b))
+(expect "balance of 20.0 after debit step" 20.0
+  (with-read coin-table (get-pact-account CROWDFUND_ACCT) { "balance" := b } b))
+(get-pact-account CROWDFUND_ACCT)
+  (continue-pact 1 false)
+(campaign-balance "project1")
+(rollback-tx)
+;;Rollback to first beginning state
+(begin-tx)
+
+(use crowdfund-campaign)
+(use coin)
+(expect "balance of 50.0 after rollback" 50.0 (with-read coin-table "kate-acct" { "balance" := b } b))
+;(expect "balance of 0.0 after rollback" 0.0 (with-read coin-table "crowdfund" { "balance" := b } b))
+
+(commit-tx)
+
+;; Crowdfund campaign cancels
+(begin-tx)
+(use crowdfund-campaign)
+(use coin)
+;;Step 0 - Initiates by debiting the investor
+(fund-campaign "bob-acct" "project1" 30.0)
+(expect "balance of 70.0 after debit step" 70.0 (with-read coin-table "bob-acct" { "balance" := b } b))
+(expect "balance of 30.0 after debit step" 30.0 (with-read coin-table (get-pact-account CROWDFUND_ACCT) { "balance" := b } b))
+;;test Rollback; test rollback
+(continue-pact 0 true)
+
+
+;;Step 0 - Rollback when campaign doesn't meet the goal
+(expect "balance of 100.0 after investor credit step" 100.0 (with-read coin-table "bob-acct" { "balance" := b } b))
+(expect "balance of 0.0 after investor credit step" 0.0 (with-read coin-table (get-pact-account CROWDFUND_ACCT) { "balance" := b } b))
+
+
+;;test-success step 1
+(pact-state true)
+(fund-campaign "bob-acct" "project1" 30.0)
+(continue-pact 1)
+(expect "balance of 100.0 after investor credit step" 70.0 (with-read coin-table "bob-acct" { "balance" := b } b))
+(expect "balance of 0.0 after investor credit step" 0.0 (with-read coin-table (get-pact-account CROWDFUND_ACCT) { "balance" := b } b))
+
+(rollback-tx)
+
+(begin-tx)
+(use coin)
+
+
+
+
+(commit-tx)
