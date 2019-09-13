@@ -1,0 +1,33 @@
+{
+  "name": "crowdfunding",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start:pact": "rm -Rf ./log && mkdir log && pact --serve server.conf",
+    "seed:coin-sig": "./initialize-coin-sig.sh 9001",
+    "seed:coin": "./initialize-coin.sh 9001",
+    "seed:contract": "./initialize-contracts.sh 9001",
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build"
+  },
+  "dependencies": {
+    "pact-lang-api": "^3.1.0",
+    "uuid": "^3.3.2",
+    "vue": "^2.6.6",
+    "vuetify": "^1.3.0"
+  },
+  "devDependencies": {
+    "@vue/cli-plugin-babel": "^3.4.0",
+    "@vue/cli-service": "^3.4.0",
+    "stylus": "^0.54.5",
+    "stylus-loader": "^3.0.1",
+    "vue-cli-plugin-vuetify": "^0.4.6",
+    "vue-template-compiler": "^2.6.6",
+    "vuetify-loader": "^1.0.5"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not ie <= 8"
+  ]
+}
