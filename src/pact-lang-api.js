@@ -510,7 +510,7 @@ const sendSigned = async function (signedCmd, apiHost) {
   return tx;
 }
 
-module.exports = {
+export default {
   crypto: {
     binToHex: binToHex,
     hexToBin: hexToBin,
