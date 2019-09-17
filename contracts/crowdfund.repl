@@ -3,7 +3,7 @@
 (env-data { "admin-keyset": ["admin"],"crowd-keyset": ["crowd"], "kate-keyset": ["kate"], "bob-keyset": ["bob"] })
 (load "coin-sig.pact")
 (load "coin.pact")
-(load "crowdfund.pact")
+(load "crowdfund-pacts.pact")
 (commit-tx)
 (typecheck 'crowdfund-campaign)
 (verify 'crowdfund-campaign)
@@ -14,14 +14,14 @@
 
 (test-capability (TRANSFER))
 (create-account "kate-acct" (read-keyset "kate-keyset"))
-(credit "kate-acct" (read-keyset "kate-keyset") 50.0)
+(credit "kate-acct" (read-keyset "kate-keyset") 500.0)
 
 (create-account "bob-acct" (read-keyset "bob-keyset"))
-(credit "bob-acct" (read-keyset "bob-keyset") 100.0)
+(credit "bob-acct" (read-keyset "bob-keyset") 500.0)
 
 (create-account "crowd-acct" (read-keyset "crowd-keyset"))
 
-(create-campaign "project1" "DESCRIPTION" "crowd-acct" 800.0 (time "2019-08-21T12:00:00Z"));campaignId project description target-balance target-date keyset)
+(create-campaign "project1" "DESCRIPTION" "crowd-acct" 800.0 (time "2019-08-21T12:00:00Z") (time "2019-08-25T12:00:00Z"));campaignId project description target-balance target-date keyset)
 (read-campaigns)
 (commit-tx)
 
@@ -29,60 +29,79 @@
 (begin-tx)
 (use crowdfund-campaign)
 (use coin)
-(env-chain-data {"block-time": (time "2019-07-22T12:00:00Z")})
-(curr-time)
-(time "2016-07-22T12:00:00Z")
-(fund-campaign "kate-acct" "project1" 20.0)
+(env-chain-data {"block-time": (time "2019-08-22T12:00:00Z")})
 
-(curr-time)
-(expect "balance of 30.0 after debit step" 30.0
-  (with-read coin-table "kate-acct" { "balance" := b } b))
-(expect "balance of 20.0 after debit step" 20.0
-  (with-read coin-table (get-pact-account CROWDFUND_ACCT) { "balance" := b } b))
-(get-pact-account CROWDFUND_ACCT)
-  (continue-pact 1 false)
-(campaign-balance "project1")
-(rollback-tx)
-;;Rollback to first beginning state
+(fund-campaign "kate-acct" "project1" 400.0)
+(commit-tx)
 (begin-tx)
-
 (use crowdfund-campaign)
-(use coin)
-(expect "balance of 50.0 after rollback" 50.0 (with-read coin-table "kate-acct" { "balance" := b } b))
-;(expect "balance of 0.0 after rollback" 0.0 (with-read coin-table "crowdfund" { "balance" := b } b))
 
+(env-hash (hash "hello"))
+(fund-campaign "bob-acct" "project1" 500.0)
 (commit-tx)
 
-;; Crowdfund campaign cancels
 (begin-tx)
 (use crowdfund-campaign)
-(use coin)
-;;Step 0 - Initiates by debiting the investor
-(fund-campaign "bob-acct" "project1" 30.0)
-(expect "balance of 70.0 after debit step" 70.0 (with-read coin-table "bob-acct" { "balance" := b } b))
-(expect "balance of 30.0 after debit step" 30.0 (with-read coin-table (get-pact-account CROWDFUND_ACCT) { "balance" := b } b))
-;;test Rollback; test rollback
-(continue-pact 0 true)
-
-
-;;Step 0 - Rollback when campaign doesn't meet the goal
-(expect "balance of 100.0 after investor credit step" 100.0 (with-read coin-table "bob-acct" { "balance" := b } b))
-(expect "balance of 0.0 after investor credit step" 0.0 (with-read coin-table (get-pact-account CROWDFUND_ACCT) { "balance" := b } b))
-
-
-;;test-success step 1
-(pact-state true)
-(fund-campaign "bob-acct" "project1" 30.0)
-(continue-pact 1)
-(expect "balance of 100.0 after investor credit step" 70.0 (with-read coin-table "bob-acct" { "balance" := b } b))
-(expect "balance of 0.0 after investor credit step" 0.0 (with-read coin-table (get-pact-account CROWDFUND_ACCT) { "balance" := b } b))
-
+(at 'guard (coin.account-info 'kate-acct))
+(coin.account-balance 'kate-acct)
+(continue-pact 0 true "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g")
+(continue-pact 0 true "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8")
+(coin.account-balance 'kate-acct)
 (rollback-tx)
 
 (begin-tx)
-(use coin)
+
+(use crowdfund-campaign)
+(env-chain-data {"block-time": (time "2019-08-27T12:00:00Z")})
+(expect-failure "Campaign has ended" (continue-pact 0 true "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g"))
+(rollback-tx)
 
 
+(begin-tx)
+(use crowdfund-campaign)
+(env-chain-data {"block-time": (time "2019-08-24T12:00:00Z")})
+(cancel-campaign 'project1)
+(continue-pact 0 true "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g")
+(rollback-tx)
 
+(begin-tx)
+(use crowdfund-campaign)
+(env-chain-data {"block-time": (time "2019-08-24T12:00:00Z")})
+(cancel-campaign 'project1)
+(continue-pact 0 true "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g")
+(rollback-tx)
 
-(commit-tx)
+(begin-tx)
+(use crowdfund-campaign)
+(env-chain-data {"block-time": (time "2019-08-28T12:00:00Z")})
+(expect-failure "Campaign ended" (cancel-campaign 'project1))
+(expect-failure "campaign ended, so no refund"
+  (continue-pact 0 true "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g"))
+(rollback-tx)
+
+(begin-tx)
+(use crowdfund-campaign)
+(env-chain-data {"block-time": (time "2019-08-22T12:00:00Z")})
+(continue-pact 0 true "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g")
+(env-chain-data {"block-time": (time "2019-08-27T12:00:00Z")})
+(expect-failure "Campaign already ended and failed" (cancel-campaign 'project1))
+(fail-campaign 'project1)
+
+;;Can get refund after failure
+(continue-pact 0 true "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8")
+(rollback-tx)
+
+(begin-tx)
+(use crowdfund-campaign)
+(env-chain-data {"block-time": (time "2019-08-22T12:00:00Z")})
+(env-chain-data {"block-time": (time "2019-08-27T12:00:00Z")})
+(expect-failure "Campaign already ended and failed" (cancel-campaign 'project1))
+(succeed-campaign 'project1)
+
+;;Can get refund after failure
+(expect-failure "Can't get refund after campaign closes"
+  (continue-pact 0 true "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"))
+(continue-pact 1 false "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g")
+(continue-pact 1 false "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8")
+(expect "money went through after campaign success" 900.0 (coin.account-balance 'crowd-acct))
+(rollback-tx)

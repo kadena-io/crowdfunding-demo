@@ -1,15 +1,17 @@
+(define-keyset 'admin-keyset (read-keyset 'admin-keyset))
+
 (module crowdfund-campaign 'admin-keyset
   (use coin)
   ;define campaign schema
   (defschema campaign
     title:string
     description:string
-    current-raise:decimal
     target-raise:decimal
+    current-raise:decimal
     start-date:time
     target-date:time
-    ownerId:string
-    keyset:guard
+    ownerAccount:string
+    guard:guard
     status:integer
     )
 
@@ -21,7 +23,7 @@
     )
 
   (deftable campaigns-table:{campaign})
-  (deftable funds-table: {fund})
+  (deftable funds-table:{fund})
 
   (defconst CREATED 0)
   (defconst CANCELLED 1)
@@ -37,20 +39,34 @@
 
   (defcap CAMPAIGN_GUARD (title)
     (with-read campaigns-table title {
-      "keyset":=guard
+      "guard":=guard
       }
       (enforce-guard guard))
   )
 
-  (defcap ROLLBACK (title from)
+  (defcap ROLLBACK (title from:string)
     (with-read campaigns-table title {
-      "status":=status
+      "target-date":=target-date,
+      "start-date":=start-date,
+      "status":= status
       }
+      (let ((from-guard (at 'guard (account-info from))
+      ))
       (enforce-one "refund guard failure or campaign already succeeded" [
-        (enforce-guard (at 'guard (account-info from)))
+        (enforce (enforce-refund target-date start-date status from-guard) "Campaign is not open or guard don't match")
         (enforce (= status CANCELLED) "Campaign has cancelled")
         (enforce (= status FAILED) "Campaign has failed")
-        ])))
+        ])
+       )))
+
+  (defun enforce-refund:bool (target-date:time start-date:time status:integer issuer-guard:guard)
+      (enforce (!= status CANCELLED) "CAMPAIGN HAS BEEN CANCELLED")
+      (enforce (!= status FAILED) "Campaign has failed")
+      (enforce (!= status SUCCEEDED) "Campaign has failed")
+      (enforce (< (curr-time) target-date) "CAMPAIGN HAS ENDED")
+      (enforce (>= (curr-time) start-date) "CAMPAIGN HAS NOT STARTED")
+      (enforce-guard issuer-guard)
+    )
 
   (defcap CANCEL:bool (title)
     (with-read campaigns-table title{
@@ -77,7 +93,8 @@
       }
       (enforce (>= (curr-time) target-date) "CAMPAIGN HAS NOT ENDED")
       (enforce (>= current-raise target-raise) "CAMPAIGN HAS NOT RAISED ENOUGH")
-      (enforce (!= status CANCELLED) "CAMPAIGN HAS BEEN CANCELLED")))
+      (enforce (!= status CANCELLED) "CAMPAIGN HAS BEEN CANCELLED")
+      ))
 
   (defcap FAIL:bool (title)
     (with-read campaigns-table title{
@@ -96,14 +113,14 @@
 
   (defun create-campaign (
     title:string description:string
-    ownerId:string target-raise:decimal
+    ownerAccount:string target-raise:decimal
     start-date:time target-date:time)
     "Adds a campaign to campaign table"
     (enforce (< (curr-time) start-date) "Start Date shouldn't be in the past")
     (enforce (< start-date target-date) "Start Date should be before target-date")
-    (enforce (< 0 target-raise) "Target raise is not positive number")
+    (enforce (< 0.0 target-raise) "Target raise is not positive number")
 
-    (with-capability (ACCT_GUARD ownerId)
+    (with-capability (ACCT_GUARD ownerAccount)
         (insert campaigns-table title {
             "title": title,
             "description": description,
@@ -111,8 +128,8 @@
             "current-raise": 0.0,
             "start-date":start-date,
             "target-date":target-date,
-            "ownerId": ownerId,
-            "keyset": (at 'guard (account-info ownerId)),
+            "ownerAccount": ownerAccount,
+            "guard": (at 'guard (account-info ownerAccount)),
             "status": CREATED
             })))
 
@@ -123,10 +140,11 @@
       (constantly true)))
 
   (defun cancel-campaign (title)
-    (with-capability (CAMPAIGN_GUARD title)
-      (update campaigns-table title {
-          "status": CANCELLED
-       }))
+    (with-capability (OPEN title)
+      (with-capability (CAMPAIGN_GUARD title)
+        (update campaigns-table title {
+            "status": CANCELLED
+         })))
   ;;Rollback all -get all pacts and rollback
   )
 
@@ -143,7 +161,7 @@
       (update campaigns-table title {
           "status": FAILED
        }))
-  ;;Rollback all -get all pacts and rollback
+  ;;Rollback all - get all pacts and rollback
   )
 
   (defun create-fund (title funder)
@@ -155,15 +173,15 @@
        }))
 
   (defun cancel-fund (title funder)
-    (require-capability (ROLLBACK))
-     (insert funds-table (pact-id) {
-       "campaign-title":title,
-       "fundOwner":funder,
-       "pact-id":(pact-id),
-       "status":CANCELLED
-       }))
+    (require-capability (ROLLBACK title funder))
+    (update funds-table (pact-id) {
+      "campaign-title":title,
+      "fundOwner":funder,
+      "pact-id":(pact-id),
+      "status":CANCELLED
+      }))
 
-  (defun fetch-pacts (title)
+  (defun fetch-pacts:list (title:string)
     (select funds-table (where 'campaign-title (= title))))
 
   (defun raise-campaign (title amount)
@@ -205,7 +223,7 @@
       ;;Executes when the campaign meets the goal
       (step
         (with-capability (SUCCESS title)
-          (with-read campaigns-table title {"ownerId":= owner }
+          (with-read campaigns-table title {"ownerAccount":= owner }
           (transfer (get-pact-account CROWDFUND_ACCT) owner amount)))))
 
   (defun get-pact-account:string (pfx:string) (format "{}-{}" [pfx (pact-id)]))
@@ -213,5 +231,7 @@
   (defun curr-time:time ()
     @doc "Returns current chain's block-time in time type"
     (at 'block-time (chain-data)))
+)
 
-  )
+(create-table campaigns-table)
+(create-table funds-table)

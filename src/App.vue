@@ -1,295 +1,232 @@
-<template>
-  <v-app class="grey lighten-3">
-    <v-content>
-      <v-container>
-        <v-layout
-          text-xs-center
-          wrap
-        >
-          <v-flex mb-4>
-            <h1 class="display-2 font-weight-bold mb-3">
-              Crowdfunding
-            </h1>
-            <p class="subheading font-weight-regular">
-              Utilizing Pact for Decentralized Crowdfunding
-            </p>
-          </v-flex>
-        </v-layout>
-
-        <v-layout row justify-center>
-          <v-dialog v-model="startProjectDialog" max-width="600px" persistent>
-            <v-btn slot="activator" color="primary" dark>Start a Project</v-btn>
-            <v-card>
-              <v-card-title>
-                <span class="headline font-weight-bold mt-2 ml-4">Bring your project to life</span>
-              </v-card-title>
-              <v-card-text class="pt-0">
-                <v-container class="pt-0" grid-list-md>
-                  <v-layout wrap>
-                    <v-flex xs12 sm6>
-                      <v-text-field
-                        label="Your Account"
-                        persistent-hint
-                        v-model="newProject.account">
-                      </v-text-field>
-                    </v-flex>
-                    <v-flex xs12 sm6>
-                      <v-text-field
-                        label="Target Amount (Kadena Coin)"
-                        type="number"
-                        step="0.0001"
-                        min="0"
-                        v-model="newProject.targetAmount">
-                      </v-text-field>
-                    </v-flex>
-                    <v-flex xs12>
-                      <v-text-field
-                        label="Title"
-                        persistent-hint
-                        v-model="newProject.title">
-                      </v-text-field>
-                    </v-flex>
-                    <v-flex xs12>
-                      <v-textarea
-                        label="Description"
-                        persistent-hint
-                        v-model="newProject.description">
-                      </v-textarea>
-                    </v-flex>
-                    <v-flex xs12 sm6>
-                      <v-text-field
-                        label="Start Date"
-                        type="date"
-                        v-model="newProject.startDate">
-                      </v-text-field>
-                    </v-flex>
-                    <v-flex xs12 sm6>
-                      <v-text-field
-                        label="Target Date"
-                        type="date"
-                        v-model="newProject.targetDate">
-                      </v-text-field>
-                    </v-flex>
-                  </v-layout>
-                </v-container>
-              </v-card-text>
-              <v-card-actions>
-                <v-spacer></v-spacer>
-                <v-btn
-                  color="blue darken-1"
-                  flat
-                  @click="startProjectDialog = false;
-                  newProject.isLoading = false;">
-                  Close
-                </v-btn>
-                <v-btn color="blue darken-1"
-                  flat
-                  @click="startProject"
-                  :loading="newProject.isLoading">
-                  Save
-                </v-btn>
-              </v-card-actions>
-            </v-card>
-          </v-dialog>
-        </v-layout>
-      </v-container>
-
-      <v-container
-        grid-list-lg
-      >
-        <h1 class="display-1 font-weight-bold mb-3">
-          Projects
-        </h1>
-        <v-layout row wrap>
-          <v-flex v-for="(project, index) in projectData" :key="index" xs12>
-            <v-dialog
-              v-model="project.dialog"
-              width="800"
+<template lang="html">
+  <div>
+    <sui-container text-align="center">
+      <sui-divider hidden />
+      <h1 is="sui-header">Crowdfunding</h1>
+      <sui-header-subheader>Utilizing Pact for Decentralized Crowdfunding</sui-header-subheader>
+    </sui-container>
+    <sui-container text-align="center">
+      <sui-divider hidden />
+      <sui-button @click.native="startProjectDialog = true">Start a Campaign</sui-button>
+    </sui-container>
+    <div>
+      <sui-modal v-model="startProjectDialog">
+        <sui-modal-header>Bring your project to life</sui-modal-header>
+        <sui-modal-content>
+          <sui-form>
+            <sui-form-field>
+              <label>Your Kadena Account</label>
+              <input v-model="newProject.account" placeholder="Account Name" />
+            </sui-form-field>
+            <sui-form-field>
+              <label>Project Title</label>
+              <input v-model="newProject.title" placeholder="Project Title" />
+            </sui-form-field>
+            <sui-form-field>
+              <label>Description</label>
+              <textarea v-model="newProject.description" placeholder="Description" />
+            </sui-form-field>
+            <sui-form-field>
+            <sui-form-field>
+              <label>Start Date (starts 12AM)</label>
+              <input type="date" v-model="newProject.startDate" placeholder="Start Date" />
+            </sui-form-field>
+            <sui-form-field>
+              <label>Target Date (ends 12AM)</label>
+              <input type="date" v-model="newProject.targetDate" placeholder="Target Date" />
+            </sui-form-field>
+            <sui-form-field>
+              <label>Target Raise (in Kadena Coins)</label>
+              <input type="number" v-model="newProject.targetRaise" placeholder="Target Raise" />
+            </sui-form-field>
+            </sui-form-field>
+          </sui-form>
+        </sui-modal-content>
+        <sui-modal-actions>
+          <sui-button
+          positive
+          type="submit"
+          @click="startProject()"
+          >Submit</sui-button>
+          <sui-button
+            negative
+            @click="startProjectDialog = false;"
+            newProject.isLoading = false
             >
-              <v-card>
-                <v-card-title class="headline font-weight-bold">
-                  {{ project.title }}
-                </v-card-title>
-                <v-card-text>
-                {{project.owner}}
-                </v-card-text>
-                <v-card-text>
-                  {{ project.description }}
-                </v-card-text>
-                <v-card-actions>
-                  <v-spacer></v-spacer>
-                  <v-btn
-                    color="blue darken-1"
-                    flat="flat"
-                    @click="projectData[index].dialog = false"
-                  >
-                    Close
-                  </v-btn>
-                </v-card-actions>
-              </v-card>
-            </v-dialog>
-            <v-hover>
-              <v-card
-                slot-scope="{ hover }"
-                :class="`elevation-${hover ? 10 : 2}`"
-              >
-                <v-card-title primary-title>
-                  <div>
-                    <div class="headline font-weight-bold">
-                      <v-chip
-                        label
-                        :color="stateMap[project.status].color"
-                        text-color="white" class="mt-0">
-                      {{ stateMap[project.status].text }}
-                      </v-chip>
-                      {{ project.title }}
-                    </div>
-                    <br/>
-                    <span>{{ project.description.substring(0, 100) }}</span>
-                    <span v-if="project.description.length > 100">
-                      ... <a @click= "true">[Show full]</a>
-                    </span>
-                    <br/><br/>
-                    <small>Up Until: <b>{{ new Date(project.targetDate) }}</b></small>
-                    <br/><br/>
-                    <small v-if="project.status == 1">Project Canceled</small>
-                    <small v-if="project.status == 2">has been Achieved</small>
-                    <small v-if="project.status == 3">has been Expired</small>
-                  </div>
-                </v-card-title>
-                <v-flex
-                  v-if="project.status == 0"
-                  class="d-flex ml-3">
-                  <v-text-field
-                    label="Your Account"
-                    type="text"
-                    v-model="project.fundAccount"
-                  ></v-text-field>
-                  <v-text-field
-                    label="Amount (in Kadena Coin)"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    v-model="project.fundAmount"
-                  ></v-text-field>
-                  <v-btn
-                    class="mt-3"
-                    color="light-blue darken-1 white--text"
-                    @click="fundProject(index)"
-                    :loading="project.isLoading"
-                  >
-                    Fund
-                  </v-btn>
-                </v-flex>
-                <v-flex class="d-flex ml-3" xs12 sm6 md3>
-                  <v-btn
-                    v-if="project.pacts == false"
-                    class="mt-3"
-                    color="amber darken-1 white--text"
-                    @click="getPacts(project.title)"
-                    :loading="project.isLoading"
-                  >
-                    View Funds
-                  </v-btn>
-                  <v-btn
-                    v-if="project.pacts == true"
-                    class="mt-3"
-                    color="amber darken-1 white--text"
-                    @click="closePacts(project.title)"
-                    :loading="project.isLoading"
-                  >
-                    Close Funds
-                  </v-btn>
-                </v-flex>
-                  <v-flex class="d-flex" xs6 >
-                    <v-btn
-                      v-if="project.pacts == true"
-                      class="mt-3"
-                      color="amber darken-1 white--text"
-                      @click="cancelPacts(project.title)"
-                      :loading="project.isLoading"
-                    >
-                      Refund all Funds
-                    </v-btn>
-                  </v-flex>
-                  <v-flex class="d-flex" xs6 >
-                    <v-btn
-                      v-if="project.pacts == true"
-                      class="mt-3"
-                      color="amber darken-1 white--text"
-                      @click="succeedCampaign(project.title)"
-                      :loading="project.isLoading"
-                    >
-                      Proceed all Funds
-                    </v-btn>
-                  </v-flex>
-                  <v-flex class="d-flex ml-3" xs12 sm6 md3>
-                    <v-card
-                        class="mx-auto"
-                        max-width="400"
-                        tile
-                        v-if="project.pacts == true"
-                        v-for="(pact, index) in pacts" :key="index" 
-                      >
-
-                      <v-list>
-                        <v-list-item>
-                          <v-list-item-title>{{pact.issuer}}</v-list-item-title>
-                        </v-list-item>
-                      </v-list>
-
-                    </v-card> 
-                </v-flex>
-                <v-card-actions v-if="project.status == 0" class="text-xs-center">
-                  <span class="font-weight-bold" style="width: 200px;">
-                    {{ project.currentAmount }} Kadena Coin
-                  </span>
-                  <v-progress-linear
-                    height="10"
-                    :color="stateMap[project.status].color"
-                    :value="(project.currentAmount / project.targetAmount) * 100"
-                  ></v-progress-linear>
-                  <span class="font-weight-bold" style="width: 200px;">
-                    {{ project.targetAmount}} Kadena Coin
-                  </span>
-                </v-card-actions>
-              </v-card>
-            </v-hover>
-          </v-flex>
-        </v-layout>
-      </v-container>
-    </v-content>
-  </v-app>
+            Cancel
+          </sui-button>
+        </sui-modal-actions>
+      </sui-modal>
+    </div>
+    <div>
+      <sui-modal v-model="fundProjectDialog">
+        <sui-modal-header>Support {{projectToFund.title}}</sui-modal-header>
+        <sui-modal-content>
+          <sui-form>
+            <sui-form-field>
+              <label>Your Kadena Account</label>
+              <input
+                v-model="projectToFund.account"
+                placeholder="Account" >
+            </sui-form-field>
+            <sui-form-field>
+              <label>Amount (in Kadena Coins)</label>
+              <input
+              v-model="projectToFund.amount"
+              placeholder="Amount" >
+            </sui-form-field>
+          </sui-form>
+        </sui-modal-content>
+        <sui-modal-actions>
+          <sui-button
+          positive
+          type="submit"
+          @click="fundProject()"
+          >Support</sui-button>
+          <sui-button
+            negative
+            @click="fundProjectDialog=false"
+            >
+            Cancel
+          </sui-button>
+        </sui-modal-actions>
+      </sui-modal>
+    </div>
+    <div>
+      <sui-divider hidden />
+      <sui-menu pointing>
+        <a
+          is="sui-menu-item"
+          v-for="item in menus"
+          :active="isActive(item)"
+          :key="item"
+          :content="item"
+          @click="select(item)"
+        />
+      </sui-menu>
+    </div>
+    <sui-divider hidden />
+      <div>
+        <sui-card-group :items-per-row="1">
+           <sui-card v-for="(project, index) in showing">
+             <sui-card-content>
+               <sui-statistic size="small" floated="right">
+                 <sui-statistic-value>{{project.targetAmount}}</sui-statistic-value>
+                 <sui-statistic-label>Target Raise</sui-statistic-label>
+               </sui-statistic>
+               <sui-statistic size="small" floated="right">
+                 <sui-statistic-value>{{project.currentAmount}}</sui-statistic-value>
+                 <sui-statistic-label>Current Raise</sui-statistic-label>
+               </sui-statistic>
+               <sui-label class="left floated" :color="stateMap[project.status].color">
+                 {{ stateMap[project.status].text}}
+               </sui-label>
+               <sui-card-header>{{project.title}}</sui-card-header>
+               <sui-card-meta>
+                 <span>{{project.startDate.slice(0,10)+ " ~ " + project.targetDate.slice(0,10)}}</span>
+               </sui-card-meta>
+               <sui-card-description>
+                 <p> {{project.description}}</p>
+               </sui-card-description>
+               <sui-progress
+                 :color="stateMap[project.status].color"
+                 :percent="(project.currentAmount / project.targetAmount) * 100"
+                 progress
+               />
+              <sui-button
+                v-if="project.status===1"
+                @click="cancelPacts(project.title)">
+                Process Refund
+              </sui-button>
+              <sui-button
+                v-if="showing[index].status===2"
+                @click="succeedCampaign(project.title)">
+                Process Funding
+              </sui-button>
+              <sui-button
+                v-if="showing[index].status===0"
+                @click.native="openFundDialog(index)">
+                Support this campaign
+              </sui-button>
+                <sui-button
+                  v-if="showing[index].pacts===false &&  showing[index].status !== 4"
+                  @click="getPacts(index)"
+                  :loading="project.isLoading">
+                Learn More
+                </sui-button>
+                <sui-button
+                  v-if="showing[index].pacts===true"
+                  @click="closePacts(index)"
+                  :loading="project.isLoading">
+                Close
+                </sui-button>
+             </sui-card-content>
+             <sui-card-content extra v-if="showing[index].pacts===true">
+              <sui-container>
+                <label >Supporters: </label>
+                 <a is="sui-label"  v-for="(pact, index) in pacts" :key="index" >
+                  {{pact.issuer}}
+                 </a>
+              </sui-container>
+            </sui-card-content>
+          </sui-card>
+       </sui-card-group>
+      </div>
+    </div>
 </template>
 
 <script>
-// We import our the scripts for the smart contract instantiation, and web3
 import Pact from './pact-lang-api.js';
 export default {
   name: 'App',
   data() {
     return {
       startProjectDialog: false,
-      account: null,
+      fundProjectDialog:false,
+      active: 'All',
+      menus: ['Started', 'Canceled', 'Expired', 'Succeeded', 'Upcoming', 'All'],
+      activeMenu: 'All',
       stateMap: [
-        { color: 'primary', text: 'Created' },
-        { color: 'warning', text: 'Expired' },
-        { color: 'success', text: 'Completed' },
+        { color: 'blue', text: 'Created' },
+        { color: 'red', text: 'Canceled' },
+        { color: 'green', text: 'Completed' },
+        { color: 'orange', text: 'Expired' },
+        { color: 'yellow', text: 'Upcoming' }
+
       ],
       pacts:[],
       projectData: [],
       newProject: { isLoading: false },
-      APIHost : "https://eu1.testnet.chainweb.com/chainweb/0.0/testnet02/chain/0/pact"
+      APIHost : "https://eu1.testnet.chainweb.com/chainweb/0.0/testnet02/chain/0/pact",
+      showing: [],
+      projectToFund:{}
     };
   },
   mounted() {
     this.getProjects();
   },
   methods: {
+    isActive(name) {
+      return this.active === name;
+    },
+    select(name) {
+      this.activeMenu = name;
+      if (this.activeMenu==="All") {
+        this.showing=this.projectData;
+        this.active=name;
+      }
+      else {
+        this.showing = this.projectData.filter(prj => prj.status ===this.menus.indexOf(this.activeMenu))
+        .sort((a,b)=>{
+        if (a.startDate < b.startDate) return -1
+        else return 1;
+      });
+        this.active=name;
+      }
+    },
     getProjects() {
       const cmd= {
         pactCode: Pact.lang.mkExp("crowdfund-campaign.read-campaigns"),
-        //Create random keyPair
         keyPairs: Pact.crypto.genKeyPair()
       }
       Pact.fetch.local(cmd, this.APIHost)
@@ -298,14 +235,45 @@ export default {
       })
       .then((projects) => {
          this.projectData = projects.map(prj =>{
-           return {title:prj.title, description:prj.description, status:prj.status.int, currentAmount: prj["current-raise"], targetAmount: prj["target-raise"], targetDate: prj["target-date"]["time"], owner: prj.ownerId, dialog:false, pacts: false}
-         });
-       });
+           return {
+             title:prj.title,
+             description:prj.description,
+             status: prj.status.int=== 0 && prj["start-date"]["time"]>new Date() ? 0 : 4,
+             currentAmount: prj["current-raise"],
+             targetAmount: prj["target-raise"],
+             targetDate: prj["target-date"]["time"],
+             startDate: prj["start-date"]["time"],
+             owner: prj.ownerId,
+             dialog:false,
+             pacts: false }
+         }).sort((a,b)=>{
+         if (a.startDate < b.startDate) return -1
+         else return 1;
+       })
+       this.showing = projects.map(prj =>{
+         return {
+           title:prj.title,
+           description:prj.description,
+           status: prj.status.int===0 && prj["start-date"]["time"]>new Date() ? 0 : 4,
+           currentAmount: prj["current-raise"],
+           targetAmount: prj["target-raise"],
+           targetDate: prj["target-date"]["time"],
+           startDate: prj["start-date"]["time"],
+           owner: prj.ownerId,
+           dialog:false,
+           pacts: false }
+       }).sort((a,b)=>{
+       if (a.startDate < b.startDate) return -1
+       else return 1;
+     })
+
+     })
     },
-    getPacts(project){
-      this.projectData = [...this.projectData.filter(prj => prj.title!==project), {...this.projectData.filter(prj=>prj.title===project)[0], pacts:true}]
+    getPacts(index){
+      this.showing[index].pacts=true;
+      const project = this.showing[index]
       const cmd= {
-        pactCode: Pact.lang.mkExp(`crowdfund-campaign.fetch-pacts ${JSON.stringify(project)}`),
+        pactCode: Pact.lang.mkExp(`crowdfund-campaign.fetch-pacts ${JSON.stringify(project.title)}`),
         keyPairs: Pact.crypto.genKeyPair()
       }
       Pact.fetch.local(cmd, this.APIHost)
@@ -318,22 +286,29 @@ export default {
          });
        });
     },
-    closePacts(project){
-      this.projectData = [...this.projectData.filter(prj => prj.title!==project), {...this.projectData.filter(prj=>prj.title===project)[0], pacts:false}]
+    convertTimeJSON(date){
+      return JSON.stringify(new Date(new Date(date).setHours(24)).toISOString().replace(/\.[0-9]{3}/, ''))
+    },
+    closePacts(index){
+      this.showing[index].pacts=false;
       this.pacts=[];
     },
     async startProject() {
-      //Mounts wallet app
       this.newProject.isLoading = true;
-      const pactCode = `(crowdfund-campaign.create-campaign "${this.newProject.title}" "${this.newProject.description}" "${this.newProject.account}" ${this.newProject.targetAmount}
-      (time ${JSON.stringify(new Date(this.newProject.startDate).toISOString().replace(/\.[0-9]{3}/, ''))}) (time ${JSON.stringify(new Date(this.newProject.targetDate).toISOString().replace(/\.[0-9]{3}/, ''))})))`;
+      const pactCode = `(crowdfund-campaign.create-campaign "${this.newProject.title}" "${this.newProject.description}" "${this.newProject.account}" ${this.newProject.targetRaise}
+        (time ${this.convertTimeJSON(this.newProject.startDate)}) (time ${this.convertTimeJSON(this.newProject.targetDate)})))`;
       const cmd = await Pact.wallet.sign(pactCode);
       Pact.wallet.sendSigned(cmd, this.APIHost);
     },
-    async fundProject(index) {
-      this.projectData[index].isLoading = true;
-      const prj = this.projectData[index];
-      const pactCode = `(crowdfund-campaign.fund-campaign "${prj.fundAccount}" "${prj.title}" ${prj.fundAmount})`;
+    openFundDialog(index){
+      this.fundProjectDialog=true;
+      this.showing[index].dialog=true;
+      this.projectToFund = this.projectData[index];
+    },
+    async fundProject() {
+      // this.projectData[index].isLoading = true;
+      const prj = this.projectToFund;
+      const pactCode = `(crowdfund-campaign.fund-campaign "${prj.account}" "${prj.title}" ${prj.amount})`;
       const cmd = await Pact.wallet.sign(pactCode)
       Pact.wallet.sendSigned(cmd, this.APIHost)
     },
@@ -345,16 +320,17 @@ export default {
       }
       const res = await Pact.fetch.local(cmd, this.APIHost);
       pacts = res.data.filter(p=>p.status.int!==1).map(p=>p["pact-id"]);
-      const myKs = {
+      const crowdKs = {
         publicKey: "abd889b293d9cf2f1cff66fc6bf2a169cc2d90aa9da8f5af6959a1f49ee68b2a",
         secretKey: "678f2fee7c6ea6f0bafbcc28a94729d06ad6ef8603fe3063964cdc812b234f0d"}
       const contCmd = (pact) => {
-        return {keyPairs: myKs, 
-                pactId: pact, 
-                step: 0, 
-                rollback: true, 
-                meta: Pact.lang.mkMeta("crowdfund-operation", "1", 0.0000001, 100, 0, 28800)
-              }
+        return {
+          keyPairs: crowdKs,
+          pactId: pact,
+          step: 0,
+          rollback: true,
+          meta: Pact.lang.mkMeta("crowdfund-operation", "1", 0.0000001, 100, 0, 28800)
+        }
       }
       const contCmdArray = pacts.map(pact => contCmd(pact))
       Pact.fetch.cont(contCmdArray, this.APIHost)
@@ -368,22 +344,20 @@ export default {
       }
       const res = await Pact.fetch.local(cmd, this.APIHost);
       pacts = res.data.filter(p=>p.status.int!==1).map(p=>p["pact-id"]);
-      const myKs = {
+      const crowdKs = {
         publicKey: "abd889b293d9cf2f1cff66fc6bf2a169cc2d90aa9da8f5af6959a1f49ee68b2a",
         secretKey: "678f2fee7c6ea6f0bafbcc28a94729d06ad6ef8603fe3063964cdc812b234f0d"}
       const contCmd = (pact) => {
-        return {keyPairs: myKs, 
-                pactId: pact, 
-                step: 1, 
-                rollback: false, 
-                meta: Pact.lang.mkMeta("crowdfund-operation", "1", 0.0000001, 100, 0, 28800)
-              }
+        return {
+          keyPairs: crowdKs,
+          pactId: pact,
+          step: 1,
+          rollback: false,
+          meta: Pact.lang.mkMeta("crowdfund-operation", "1", 0.0000001, 100, 0, 28800)
+        }
       }
       const contCmdArray = pacts.map(pact => contCmd(pact))
       Pact.fetch.cont(contCmdArray, this.APIHost)
-      // this.projectData[index].isLoading = true;
-
-
     }
   }
 };

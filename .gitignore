@@ -12,8 +12,6 @@ initialize-coin-sig.sh
 initialize-coin.sh
 initialize-contracts.sh
 
-/contracts/coin.pact
-/contracts/coin-sig.pact
 /contracts/log
 
 .env.local

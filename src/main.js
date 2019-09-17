@@ -1,5 +1,5 @@
 import Vue from 'vue';
-import './plugins/vuetify';
+import './plugins/semantic-ui';
 import App from './App.vue';
 
 Vue.config.productionTip = false;
