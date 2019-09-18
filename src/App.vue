@@ -64,6 +64,29 @@
       </sui-modal>
     </div>
     <div>
+      <sui-modal v-model="reqKeyDialog">
+        <sui-modal-header>Your Request Key is </sui-modal-header>
+        <sui-modal-content>
+          Request Key: {{requestKey}}<br/>
+          Result: {{pollResult}}
+        </sui-modal-content>
+        <sui-modal-actions>
+          <sui-button
+            Positive
+            @click="pollReqKey()"
+            >
+            Check Status
+          </sui-button>
+          <sui-button
+            negative
+            @click="reqKeyDialog = false;"
+            >
+            Close
+          </sui-button>
+        </sui-modal-actions>
+      </sui-modal>
+    </div>
+    <div>
       <sui-modal v-model="fundProjectDialog">
         <sui-modal-header>Support {{projectToFund.title}}</sui-modal-header>
         <sui-modal-content>
@@ -147,12 +170,11 @@
                 Process Funding
               </sui-button>
               <sui-button
-                color="black"
+                color="green"
                 content="Support this Campaign"
                 v-if="showing[index].status===0 && new Date(showing[index].targetDate)>new Date()"
                 @click.native="openFundDialog(index)"/>
               <sui-button
-                color="black"
                 content="Learn More"
                 v-if="showing[index].pacts===false &&  showing[index].status !== 4"
                 @click="getPacts(index)"
@@ -173,7 +195,8 @@
                   v-if="project.status===1 || project.status===3"
                   @click="cancelPacts(project.title)"/>
                 <sui-button
-                  secondary
+                  negative
+                  color="red"
                   v-if="showing[index].status===0 && new Date(showing[index].targetDate)>new Date()"
                   @click.native="cancelCampaign(project.title)">
                   Cancel this campaign
@@ -208,8 +231,9 @@ export default {
     return {
       startProjectDialog: false,
       fundProjectDialog:false,
+      reqKeyDialog: false,
       active: 'All',
-      menus: ['Started', 'Canceled', 'Expired', 'Succeeded', 'Upcoming', 'All'],
+      menus: ['Started', 'Canceled', 'Succeeded', 'Expired', 'Upcoming', 'All'],
       activeMenu: 'All',
       stateMap: [
         { color: 'blue', text: 'Started' },
@@ -218,6 +242,8 @@ export default {
         { color: 'orange', text: 'Expired' },
         { color: 'yellow', text: 'Upcoming' }
       ],
+      requestKey: [],
+      pollResult:{},
       pacts:[],
       projectData: [],
       newProject: { isLoading: false },
@@ -242,8 +268,7 @@ export default {
       else {
         this.showing = this.projectData.filter(prj => prj.status ===this.menus.indexOf(this.activeMenu))
         .sort((a,b)=>{
-        if (a.startDate < b.startDate) return -1
-        else return 1;
+          return a.status-b.status;
       });
         this.active=name;
       }
@@ -271,9 +296,8 @@ export default {
              dialog:false,
              pacts: false }
          }).sort((a,b)=>{
-         if (a.startDate < b.startDate) return -1
-         else return 1;
-       })
+           return a.status-b.status;
+         })
        this.showing = projects.map(prj =>{
          return {
            title:prj.title,
@@ -287,11 +311,10 @@ export default {
            dialog:false,
            pacts: false }
        }).sort((a,b)=>{
-       if (a.startDate < b.startDate) return -1
-       else return 1;
-     })
+         return a.status-b.status;
+       })
 
-     })
+       })
     },
     getPacts(index){
       this.showing[index].pacts=true;
@@ -325,19 +348,25 @@ export default {
       const pactCode = `(crowdfund-campaign.create-campaign "${this.newProject.title}" "${this.newProject.description}" "${this.newProject.account}" ${this.newProject.targetRaise}
         (time ${this.convertTimeToUTC(this.newProject.startDate)}) (time ${this.convertTimeToUTC(this.newProject.targetDate)})))`;
       const cmd = await Pact.wallet.sign(pactCode);
-      Pact.wallet.sendSigned(cmd, this.APIHost);
+      const reqKey = await Pact.wallet.sendSigned(cmd, this.APIHost);
+      this.requestKey=reqKey.requestKeys;
+      this.reqKeyDialog=true;
+      startProjectDiaglog=false;
     },
     openFundDialog(index){
       this.fundProjectDialog=true;
       this.showing[index].dialog=true;
-      this.projectToFund = this.projectData[index];
+      this.projectToFund = this.showing[index];
     },
     async fundProject() {
       // this.projectData[index].isLoading = true;
       const prj = this.projectToFund;
       const pactCode = `(crowdfund-campaign.fund-campaign "${prj.account}" "${prj.title}" ${prj.amount})`;
       const cmd = await Pact.wallet.sign(pactCode)
-      Pact.wallet.sendSigned(cmd, this.APIHost)
+      const reqKey = await Pact.wallet.sendSigned(cmd, this.APIHost)
+      this.requestKey=reqKey.requestKeys;
+      this.reqKeyDialog=true;
+      this.fundProjectDialog=false
     },
     async cancelPacts(project) {
       let pacts=[];
@@ -360,13 +389,16 @@ export default {
         }
       }
       const contCmdArray = pacts.map(pact => contCmd(pact))
-      Pact.fetch.cont(contCmdArray, this.APIHost)
-      // this.projectData[index].isLoading = true;
+      const reqKey = await Pact.fetch.cont(contCmdArray, this.APIHost)
+      this.requestKey=reqKey.requestKeys;
+      this.reqKeyDialog=true;
     },
     async cancelCampaign(title){
       const pactCode = `(crowdfund-campaign.cancel-campaign "${title}")`;
       const cmd = await Pact.wallet.sign(pactCode);
-      Pact.wallet.sendSigned(cmd, this.APIHost);
+      const reqKey = await Pact.wallet.sendSigned(cmd, this.APIHost);
+      this.requestKey=reqKey.requestKeys;
+      this.reqKeyDialog=true;
     },
     async failCampaign(title){
       const pactCode = `(crowdfund-campaign.fail-campaign "${title}")`;
@@ -380,7 +412,8 @@ export default {
         meta: Pact.lang.mkMeta("crowdfund-operation", "0", 0.000001, 10000, 0, 28800)
       }
       const reqKey = await Pact.fetch.send(cmd, this.APIHost)
-      console.log(reqKey);
+      this.requestKey=reqKey.requestKeys;
+      this.reqKeyDialog=true;
     },
     async proceedCampaign(title){
       const pactCode = `(crowdfund-campaign.succeed-campaign "${title}")`;
@@ -394,7 +427,11 @@ export default {
         meta: Pact.lang.mkMeta("crowdfund-operation", "0", 0.000001, 10000, 0, 28800)
       }
       const reqKey = await Pact.fetch.send(cmd, this.APIHost)
-      console.log(reqKey);
+      this.requestKey=reqKey.requestKeys;
+      this.reqKeyDialog=true;
+    },
+    async pollReqKey(){
+      this.pollResult = await Pact.fetch.poll({requestKeys: this.requestKey}, this.APIHost)
     },
     async succeedCampaign(project){
     let pacts=[];
@@ -420,5 +457,7 @@ export default {
       Pact.fetch.cont(contCmdArray, this.APIHost)
     }
   }
+
+
 };
 </script>

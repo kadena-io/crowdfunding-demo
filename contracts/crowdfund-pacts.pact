@@ -1,5 +1,3 @@
-(define-keyset 'admin-keyset (read-keyset 'admin-keyset))
-
 (module crowdfund-campaign 'admin-keyset
   (use coin)
   ;define campaign schema
@@ -136,7 +134,7 @@
   (defun read-campaigns:list ()
     "Read all campaigns in campaign table"
     (select campaigns-table
-      ['title 'description 'start-date 'target-date  'current-raise 'target-raise 'status]
+      ['title 'description 'ownerAccount 'start-date 'target-date  'current-raise 'target-raise 'status]
       (constantly true)))
 
   (defun cancel-campaign (title)
@@ -232,6 +230,3 @@
     @doc "Returns current chain's block-time in time type"
     (at 'block-time (chain-data)))
 )
-
-(create-table campaigns-table)
-(create-table funds-table)
