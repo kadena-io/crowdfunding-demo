@@ -7,7 +7,7 @@
     "seed:coin-sig": "./initialize-coin-sig.sh 9001",
     "seed:coin": "./initialize-coin.sh 9001",
     "seed:contract": "./initialize-contracts.sh 9001",
-    "serve": "vue-cli-service serve",
+    "serve": "vue-cli-service serve 8086",
     "build": "vue-cli-service build"
   },
   "dependencies": {
