@@ -1,3 +1,5 @@
+(namespace "user")
+(define-keyset 'admin-keyset (read-keyset 'admin-keyset))
 (module crowdfund-campaign 'admin-keyset
   (use coin)
   ;define campaign schema
@@ -17,23 +19,22 @@
     campaign-title:string
     fundOwner:string
     pact-id:string
+    escrow:string
     status:integer
     )
 
   (deftable campaigns-table:{campaign})
-  (deftable funds-table:{fund})
+  (deftable fund-table:{fund})
 
   (defconst CREATED 0)
   (defconst CANCELLED 1)
   (defconst SUCCEEDED 2)
   (defconst FAILED 3)
 
-  (defconst CROWDFUND_ACCT 'escrow-account)
-
   (defun crowdfund-guard:guard () (create-module-guard 'crowdfund-guard))
 
   (defcap ACCT_GUARD (account)
-    (enforce-guard (at 'guard (account-info account))))
+    (enforce-guard (at 'guard (details account))))
 
   (defcap CAMPAIGN_GUARD (title)
     (with-read campaigns-table title {
@@ -48,7 +49,7 @@
       "start-date":=start-date,
       "status":= status
       }
-      (let ((from-guard (at 'guard (account-info from))
+      (let ((from-guard (at 'guard (details from))
       ))
       (enforce-one "refund guard failure or campaign already succeeded" [
         (enforce (enforce-refund target-date start-date status from-guard) "Campaign is not open or guard don't match")
@@ -127,7 +128,7 @@
             "start-date":start-date,
             "target-date":target-date,
             "ownerAccount": ownerAccount,
-            "guard": (at 'guard (account-info ownerAccount)),
+            "guard": (at 'guard (details ownerAccount)),
             "status": CREATED
             })))
 
@@ -138,11 +139,10 @@
       (constantly true)))
 
   (defun cancel-campaign (title)
-    (with-capability (OPEN title)
-      (with-capability (CAMPAIGN_GUARD title)
-        (update campaigns-table title {
-            "status": CANCELLED
-         })))
+    (with-capability (CAMPAIGN_GUARD title)
+      (update campaigns-table title {
+          "status": CANCELLED
+       }))
   ;;Rollback all -get all pacts and rollback
   )
 
@@ -162,25 +162,23 @@
   ;;Rollback all - get all pacts and rollback
   )
 
-  (defun create-fund (title funder)
-     (insert funds-table (pact-id) {
+  (defun create-fund (title funder escrow)
+     (insert fund-table (pact-id) {
        "campaign-title":title,
+       "escrow": escrow,
        "fundOwner":funder,
        "pact-id":(pact-id),
        "status":CREATED
        }))
 
-  (defun cancel-fund (title funder)
+  (defun cancel-fund (title funder escrow)
     (require-capability (ROLLBACK title funder))
-    (update funds-table (pact-id) {
-      "campaign-title":title,
-      "fundOwner":funder,
-      "pact-id":(pact-id),
+    (update fund-table (pact-id) {
       "status":CANCELLED
       }))
 
   (defun fetch-pacts:list (title:string)
-    (select funds-table (where 'campaign-title (= title))))
+    (select fund-table (where 'campaign-title (= title))))
 
   (defun raise-campaign (title amount)
     (require-capability (RAISE))
@@ -200,33 +198,34 @@
           "current-raise": (- current-raise amount)
           })))
 
-  (defpact fund-campaign (from title amount)
+  (defpact fund-campaign (from title amount escrow)
 
       (step-with-rollback
         ;;initiate
         (with-capability (ACCT_GUARD from)
           (with-capability (OPEN title)
             (with-capability (RAISE)
-              (transfer-and-create from (get-pact-account CROWDFUND_ACCT) (crowdfund-guard) amount)
-              (create-fund title from)
+            ;; use pact guard
+              (transfer-create from escrow (create-pact-guard escrow) amount)
+              (create-fund title from escrow)
               (raise-campaign title amount)
               )))
         ;;rollback
         (with-capability (REFUND)
           (with-capability (ROLLBACK title from)
-            (transfer (get-pact-account CROWDFUND_ACCT) from amount)
-            (cancel-fund title from)
+            (transfer escrow from amount)
+            (cancel-fund title from escrow)
             (refund-campaign title amount)))
         )
       ;;Executes when the campaign meets the goal
       (step
         (with-capability (SUCCESS title)
           (with-read campaigns-table title {"ownerAccount":= owner }
-          (transfer (get-pact-account CROWDFUND_ACCT) owner amount)))))
-
-  (defun get-pact-account:string (pfx:string) (format "{}-{}" [pfx (pact-id)]))
+          (transfer escrow owner amount)))))
 
   (defun curr-time:time ()
     @doc "Returns current chain's block-time in time type"
     (at 'block-time (chain-data)))
 )
+
+(create-table fund-table)

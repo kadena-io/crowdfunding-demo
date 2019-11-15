@@ -13,6 +13,7 @@ initialize-coin.sh
 initialize-contracts.sh
 
 /contracts/log
+/src/ks.js
 
 .env.local
 .env.*.local

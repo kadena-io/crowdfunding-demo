@@ -97,10 +97,19 @@
 (env-chain-data {"block-time": (time "2019-08-27T12:00:00Z")})
 (expect-failure "Campaign already ended and failed" (cancel-campaign 'project1))
 (succeed-campaign 'project1)
+(succeed-campaign 'project1)
 
 ;;Can get refund after failure
 (expect-failure "Can't get refund after campaign closes"
   (continue-pact 0 true "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"))
+(continue-pact 1 false "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g")
+(continue-pact 1 false "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8")
+(expect "money went through after campaign success" 900.0 (coin.account-balance 'crowd-acct))
+(commit-tx)
+
+(begin-tx)
+(use crowdfund-campaign)
+(env-hash (hash "hellddo"))
 (continue-pact 1 false "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g")
 (continue-pact 1 false "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8")
 (expect "money went through after campaign success" 900.0 (coin.account-balance 'crowd-acct))
