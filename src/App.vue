@@ -422,12 +422,12 @@ export default {
       const contCmd = (pact) => {
         console.log(pact)
         return {
-          networkId: "testnet02",
+          networkId: "development",
           keyPairs: [{...ks, clist: [{name: "coin.GAS", args: []}]},{...Pact.crypto.genKeyPair(), clist: [{name: "coin.TRANSFER", args: [pact.escrow, pact.fundOwner, pact.amount]}]}],
           pactId: pact["pact-id"],
           step: 0,
           rollback: true,
-          meta: Pact.lang.mkMeta("heekyun-testnet", "0", 0.0000001, 100000, Math.round((new Date).getTime()/1000)-15, 28800)
+          meta: Pact.lang.mkMeta("heekyun-testnet", "0", 0.0000001, 100000, Math.round((new Date).getTime()/1000)-20, 28800)
         }
       }
       const contCmdArray = pacts.map(pact => contCmd(pact))

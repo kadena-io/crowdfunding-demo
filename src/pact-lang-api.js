@@ -88,28 +88,20 @@ var toTweetNaclSecretKey = function(keyPair) {
  * @return {object} with "hash", "sig" (signature in hex format), and "pubKey" public key value.
  */
 var sign = function(msg, keyPair) {
-  if (
-    !keyPair.hasOwnProperty("publicKey") ||
-    !keyPair.hasOwnProperty("secretKey")
-  ) {
-    throw new TypeError(
-      "Invalid KeyPair: expected to find keys of name 'secretKey' and 'publicKey': " +
-        JSON.stringify(keyPair)
-    );
-  }
   var hshBin = hashBin(msg);
   var hsh = base64UrlEncode(hshBin);
+  if (
+    !keyPair.hasOwnProperty("publicKey") &&
+    !keyPair.hasOwnProperty("secretKey")
+  ) {
+    return { hash: hsh, sig: undefined };
+  } else if (
+    keyPair.hasOwnProperty("publicKey") &&
+    (!keyPair.hasOwnProperty("secretKey") || !keyPair.secretKey)){
+      return { hash: hsh, sig: "REPLACE THIS WITH SIGNATURE" };
+    }
   var sigBin = nacl.sign.detached(hshBin, toTweetNaclSecretKey(keyPair));
-  return { hash: hsh, sig: binToHex(sigBin), pubKey: keyPair.publicKey };
-};
-
-var pullSig = function(s) {
-  if (!s.hasOwnProperty("sig")) {
-    throw new TypeError(
-      "Expected to find keys of name 'sig' in " + JSON.stringify(s)
-    );
-  }
-  return { sig: s.sig };
+  return { hash: hsh, sig: binToHex(sigBin) };
 };
 
 var pullAndCheckHashs = function(sigs) {
@@ -128,18 +120,18 @@ var pullAndCheckHashs = function(sigs) {
  * Prepare an ExecMsg pact command for use in send or local execution.
  * To use in send, wrap result with 'mkSingleCommand'.
  * @param keyPairs {array or object} - array or single ED25519 keypair and/or clist (list of `cap` in mkCap)
- * @param nonce {string} - nonce value for ensuring unique hash
- * @param pactCode {string} - pact code to execute
- * @param envData {object} - JSON message data for command
+ * @param nonce {string} - nonce value for ensuring unique hash - default to current time
+ * @param pactCode {string} - pact code to execute - required
+ * @param envData {object} - JSON of data in command - not required
  * @param meta {object} - public meta information, see mkMeta
  * @return valid pact API command for send or local use.
  */
-var prepareExecCmd = function(keyPairs, nonce=new Date().toISOString(), pactCode,
+var prepareExecCmd = function(keyPairs=[], nonce=new Date().toISOString(), pactCode,
                               envData, meta=mkMeta("","",0,0,0,0), networkId=null) {
-
   enforceType(nonce, "string", "nonce");
   enforceType(pactCode, "string", "pactCode");
   var kpArray = asArray(keyPairs);
+  kpArray = kpArray.filter(kp => !!kp.publicKey)
   var signers = kpArray.map(mkSigner);
   var cmdJSON = {
     networkId: networkId,
@@ -154,29 +146,35 @@ var prepareExecCmd = function(keyPairs, nonce=new Date().toISOString(), pactCode
     nonce: JSON.stringify(nonce)
   };
   var cmd = JSON.stringify(cmdJSON);
-  var sigs = kpArray.map(function(kp) {
-    return sign(cmd, kp);
-  });
+  var sigs = kpArray.length===0
+    ? [sign(cmd, kpArray)]
+    : kpArray.map(kp => sign(cmd, kp));
   return mkSingleCmd(sigs, cmd);
 };
 
 /**
  * Prepare an ContMsg pact command for use in send or local execution.
  * To use in send, wrap result with 'mkSingleCommand'.
- * @param keyPairs {array or object} - array or single ED25519 keypair
- * @param nonce {string} - nonce value for ensuring unique hash
- * @param pactCode {string} - pact code to execute
- * @param envData {object} - JSON message data for command
+ * @param keyPairs {array or object} - array or single ED25519 keypair and/or clist (list of `cap` in mkCap)
+ * @param nonce {string} - nonce value for ensuring unique hash - default to current time
+ * @param step {number} - integer index of step to execute in defpact body - required
+ * @param proof {string} - JSON of SPV proof, required for cross-chain transfer. See `fetchSPV` below
+ * @param rollback {bool} - Indicates if this continuation is a rollback/cancel- required
+ * @param pactId {string} - identifies the already-begun Pact execution that this is continuing - required
+ * @param envData {object} - JSON of data in command - not required
  * @param meta {object} - public meta information, see mkMeta
- * @return valid pact API command for send or local use.
+ * @return valid pact API Cont command for send or local use.
  */
-var prepareContCmd = function(keyPairs, nonce=new Date().toISOString(), proof, pactId, rollback, step, envData, meta=mkMeta("","",0,0,0,0), networkId=null) {
-  enforceType(nonce, "string", "nonce");
-  //enforceType(pactCode, "string", "pactCode");
+var prepareContCmd = function(keyPairs=[], nonce=new Date().toISOString(),
+                              proof, pactId, rollback, step, envData,
+                              meta=mkMeta("","",0,0,0,0), networkId=null) {
 
+  enforceType(nonce, "string", "nonce");
   var kpArray = asArray(keyPairs);
+  kpArray = kpArray.filter(kp => !!kp.publicKey)
   var signers = kpArray.map(mkSigner);
   var cmdJSON = {
+    networkId: networkId,
     payload: {
       cont: {
         proof: proof || null,
@@ -186,16 +184,14 @@ var prepareContCmd = function(keyPairs, nonce=new Date().toISOString(), proof, p
         data: envData || {},
       }
     },
-    //need to update this to take in from exec
-    networkId: networkId,
     signers: signers,
     meta: meta,
     nonce: JSON.stringify(nonce)
   };
   var cmd = JSON.stringify(cmdJSON);
-  var sigs = kpArray.map(function(kp) {
-    return sign(cmd, kp);
-  });
+  var sigs = kpArray.length===0
+    ? [sign(cmd, kpArray)]
+    : kpArray.map(kp => sign(cmd, kp));
   return mkSingleCmd(sigs, cmd);
 };
 
@@ -210,9 +206,14 @@ var mkSingleCmd = function(sigs, cmd) {
   enforceType(cmd, "string", "cmd");
   return {
     hash: pullAndCheckHashs(sigs),
-    sigs: sigs.map(pullSig),
+    sigs: sigs.filter(s => {
+      if (s.sig===undefined) return false;
+      else return true
+    }).map(s => {
+      return {sig: s.sig}
+    }),
     cmd: cmd
-  };
+  }
 };
 
 /**
@@ -260,8 +261,15 @@ var enforceArray = function(val, msg) {
 /**
  * Make a full 'send' endpoint exec command. See 'prepareExecCmd' for parameters.
  */
-var simpleExecCommand = function(keyPairs, nonce, pactCode, envData, meta) {
-  return mkPublicSend(prepareExecCmd(keyPairs, nonce, pactCode, envData, meta));
+var simpleExecCommand = function(keyPairs, nonce, pactCode, envData, meta, networkId) {
+  return mkPublicSend(prepareExecCmd(keyPairs, nonce, pactCode, envData, meta, networkId));
+};
+
+/**
+ * Make a full 'send' endpoint cont command. See 'prepareContCmd' for parameters.
+ */
+var simpleContCommand = function(keyPairs, nonce, step, pactId, rollback, envData, meta, proof, networkId) {
+  return mkPublicSend(prepareContCmd(keyPairs, nonce, proof, pactId, rollback, step, envData, meta, networkId));
 };
 
 var unique = function(arr) {
@@ -392,47 +400,77 @@ var mkReq = function(cmd) {
   };
 };
 
-/**
- * A Command Object to Execute in Pact Server.
- * @typedef {Object} execCmd
- * @property pactCode {string} pact code to execute
- * @property keyPairs {array or object} array or single ED25519 keypair and/or clist (list of `cap` in mkCap)
- * @property nonce {string} nonce value, default at current time
- * @property envData {object} JSON message data for command, default at empty obj
- * @property meta {object} meta information, see mkMeta
- * @property networkId {object} network identifier of where the cmd is executed.
- */
+
+
+ /**
+  * An execCmd Object to Execute in send or local.
+  * @typedef {Object} cmd to `/send` endpoint
+  * @property type {string} - type of command - "cont" or "exec", default to "exec"
+  * @property pactCode {string} - pact code to execute in "exec" command - required for "exec"
+  * @property nonce {string} - nonce value to ensure unique hash - default to current time
+  * @property envData {object} - JSON of data in command - not required
+  * @property meta {object} - public meta information, see mkMeta
+  * @property networkId {object} network identifier of where the cmd is executed.
+  */
+
+ /**
+  * A contCmd to Execute in send
+  * @typedef {Object} cmd to `/send` endpoint
+  * @property type {string} - type of command - "cont" or "exec", default to "exec"
+  * @property pactId {string} - pactId the cont command - required for "cont"
+  * @property nonce {string} - nonce value to ensure unique hash - default to current time
+  * @property step {number} - the step of the mutli-step transaction - required for "cont"
+  * @property proof {string} - JSON of SPV proof, required for cross-chain transfer. See `fetchSPV` below
+  * @property rollback {bool} - Indicates if this continuation is a rollback/cancel - required for "cont"
+  * @property envData {object} - JSON of data in command - not required
+  * @property meta {object} - public meta information, see mkMeta
+  * @property networkId {object} network identifier of where the cmd is executed.
+  */
 
 /**
  * Sends Pact command to a running Pact server and retrieves tx result.
- * @param {[execCmd] or execCmd} sendCmd cmd or a list of cmd's to execute
+ * @param {[execCmd or contCmd] or execCmd or contCmd} cmd or a list of cmds to execute
  * @param {string} apiHost host running Pact server
  * @return {object} Request key of the tx received from pact server.
  */
 const fetchSend = async function(sendCmd, apiHost){
   if (!apiHost)  throw new Error(`Pact.fetch.send(): No apiHost provided`);
-  const sendCmds = asArray(sendCmd).map(cmd => prepareExecCmd(cmd.keyPairs, cmd.nonce, cmd.pactCode, cmd.envData, cmd.meta, cmd.networkId));
+  const sendCmds = asArray(sendCmd).map(cmd => {
+    if (cmd.type === "cont") {
+      return prepareContCmd( cmd.keyPairs, cmd.nonce, cmd.proof, cmd.pactId,
+                             cmd.rollback, cmd.step, cmd.envData, cmd.meta,
+                             cmd.networkId )
+    } else {
+      return prepareExecCmd( cmd.keyPairs, cmd.nonce, cmd.pactCode,
+                             cmd.envData, cmd.meta, cmd.networkId )
+    }
+  })
   const txRes = await fetch(`${apiHost}/api/v1/send`, mkReq(mkPublicSend(sendCmds)));
   const tx = await txRes.json();
   return tx;
 };
 
-const fetchSendCont = async function(contCmd, apiHost){
-  if (!apiHost)  throw new Error(`Pact.fetch.send(): No apiHost provided`);
-  const sendConts = asArray(contCmd).map(cont => prepareContCmd(cont.keyPairs, cont.nonce, cont.proof, cont.pactId, cont.rollback, cont.step, cont.envData, cont.meta, cont.networkId))
-  const txRes = await fetch(`${apiHost}/api/v1/send`, mkReq(mkPublicSend(sendConts)));
+/**
+ * A SPV Command Object to Execute in Pact Server.
+ * @typedef {Object} spvCmd
+ * @property requestKey {string} pactId of the cross-chain transaction
+ * @property targetChainId {string} chainId of target chain of the cross-chain transaction
+ */
+
+/**
+ * Sends request to /spv to fetch SPV proof.
+ * @param {spvCmd} spvCmd see spvCmd
+ * @param {string} apiHost host running Pact server
+ * @return {string} SPV proof received from Pact server.
+ */
+const fetchSPV = async function(spvCmd, apiHost){
+  if (!apiHost)  throw new Error(`Pact.fetch.spv(): No apiHost provided`);
+  enforceType(spvCmd.targetChainId, "string", "targetChainId");
+  enforceType(spvCmd.requestKey, "string", "requestKey");
+  const txRes = await fetch(`${apiHost}/spv`, mkReq(spvCmd));
   const tx = await txRes.json();
   return tx;
 };
-
-const fetchSPV = async function(reqKey, chainId, apiHost){
-  if (!apiHost)  throw new Error(`Pact.fetch.send(): No apiHost provided`);
-  const cmd = {"requestKey": reqKey, "targetChainId": chainId}
-  const txRes = await fetch(`${apiHost}/spv`, mkReq(cmd));
-  const tx = await txRes.json();
-  return tx;
-};
-
 
 /**
  * Sends Local Pact command to a local Pact server and retrieves local tx result.
@@ -446,11 +484,11 @@ const fetchLocal = async function(localCmd, apiHost) {
   const cmd = prepareExecCmd(keyPairs, nonce, pactCode, envData, meta, networkId);
   const txRes = await fetch(`${apiHost}/api/v1/local`, mkReq(cmd));
   const tx = await txRes.json();
-  return tx.result;
+  return tx;
 };
 
 /**
- * Request poll Pact command to a running Pact server and retrieves tx result.
+ * Poll result of Pact command on a Pact server and retrieve tx result.
  * @param {{requestKeys: [<rk:string>]}} pollCmd request Keys of txs to poll.
  * @param {string} apiHost host running Pact server
  * @return {object} Array of tx request keys and tx results from pact server.
@@ -459,13 +497,11 @@ const fetchPoll = async function(pollCmd, apiHost) {
   if (!apiHost)  throw new Error(`Pact.fetch.poll(): No apiHost provided`);
   const res = await fetch(`${apiHost}/api/v1/poll`, mkReq(pollCmd));
   const resJSON = await res.json();
-  return Object.values(resJSON).map(res => {
-    return { reqKey: res.reqKey, result: res.result };
-  });
+  return resJSON;
 };
 
 /**
- * Request listen Pact command to a running Pact server and retrieves tx result.
+ * Listen for result of Pact command on a Pact server and retrieve tx result.
  * @param {{listenCmd: <rk:string>}} listenCmd reqest key of tx to listen.
  * @param {string} apiHost host running Pact server
  * @return {object} Object containing tx result from pact server
@@ -474,7 +510,7 @@ const fetchPoll = async function(pollCmd, apiHost) {
    if (!apiHost)  throw new Error(`Pact.fetch.listen(): No apiHost provided`);
    const res = await fetch(`${apiHost}/api/v1/listen`, mkReq(listenCmd));
    const resJSON = await res.json();
-   return resJSON.result;
+   return resJSON;
  };
 
 /**
@@ -505,11 +541,11 @@ var mkCap = function(role, description, name, args=[]) {
 };
 
 /**
- * A signingCmd Object to be sent to signing API
- * @typedef {Object} signingCmd - cmd to be sent to signing API
+ * A signingCmd Object to send to signing API
+ * @typedef {Object} signingCmd - cmd to send to signing API
  * @property pactCode {string} - Pact code to execute - required
  * @property caps {array or object} - Pact capability to be signed, see mkCap - required
- * @property envData {object} - JSON message data for command - optional
+ * @property envData {object} - JSON of data in command - optional
  * @property sender {string} - sender field in meta, see mkMeta - optional
  * @property chainId {string} - chainId field in meta, see mkMeta - optional
  * @property gasLimit {number} - gasLimit field in meta, see mkMeta - optional
@@ -563,7 +599,7 @@ const sendSigned = async function (signedCmd, apiHost) {
   return tx;
 }
 
-module.exports = {
+export default {
   crypto: {
     binToHex: binToHex,
     hexToBin: hexToBin,
@@ -574,6 +610,7 @@ module.exports = {
     toTweetNaclSecretKey: toTweetNaclSecretKey
   },
   api: {
+    prepareContCmd: prepareContCmd,
     prepareExecCmd: prepareExecCmd,
     mkSingleCmd: mkSingleCmd,
     mkPublicSend: mkPublicSend
@@ -584,6 +621,9 @@ module.exports = {
     mkCap: mkCap
   },
   simple: {
+    cont: {
+      createCommand: simpleContCommand
+    },
     exec: {
       createCommand: simpleExecCommand,
       createLocalCommand: prepareExecCmd,
@@ -593,11 +633,10 @@ module.exports = {
   },
   fetch: {
     send: fetchSend,
-    cont: fetchSendCont,
-    spv: fetchSPV,
     local: fetchLocal,
     poll: fetchPoll,
-    listen: fetchListen
+    listen: fetchListen,
+    spv: fetchSPV
   },
   wallet: {
     sign: signWallet,

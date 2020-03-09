@@ -1,4 +1,4 @@
-(namespace "user")
+;(namespace "user")
 (define-keyset 'admin-keyset (read-keyset 'admin-keyset))
 (module crowdfund-campaign 'admin-keyset
   (use coin)
@@ -52,7 +52,8 @@
       (let ((from-guard (at 'guard (details from))
       ))
       (enforce-one "refund guard failure or campaign already succeeded" [
-        (enforce (enforce-refund target-date start-date status from-guard) "Campaign is not open or guard don't match")
+        (enforce (enforce-refund target-date start-date status from-guard)
+          "Campaign is not open or guards don't match")
         (enforce (= status CANCELLED) "Campaign has cancelled")
         (enforce (= status FAILED) "Campaign has failed")
         ])
